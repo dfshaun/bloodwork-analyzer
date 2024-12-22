@@ -1,6 +1,0 @@
-tesseract-ocr
-libtesseract-dev
-tesseract-ocr-eng
-poppler-utils
-ghostscript
-python3-opencv
