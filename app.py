@@ -40,13 +40,13 @@ def parse_blood_work(text):
         'BUN': r'BUN[:\s]+(\d+)',
         'Creatinine': r'Creatinine[:\s]+(\d+\.?\d*)',
     }
-
+    
     results = {}
     for marker, pattern in markers.items():
         match = re.search(pattern, text)
         if match:
             results[marker] = float(match.group(1))
-
+    
     return results
 
 def analyze_results(results):
@@ -67,7 +67,7 @@ def analyze_results(results):
         'BUN': (7, 20, 'mg/dL'),
         'Creatinine': (0.6, 1.2, 'mg/dL'),
     }
-
+    
     analysis = []
     for marker, value in results.items():
         if marker in reference_ranges:
@@ -77,7 +77,7 @@ def analyze_results(results):
                 status = "LOW"
             elif value > high:
                 status = "HIGH"
-
+            
             analysis.append({
                 'Marker': marker,
                 'Value': value,
@@ -85,7 +85,7 @@ def analyze_results(results):
                 'Reference Range': f"{low}-{high}",
                 'Status': status
             })
-
+    
     return pd.DataFrame(analysis)
 
 def create_visualization(df):
@@ -102,44 +102,65 @@ def create_visualization(df):
 
 def main():
     st.title("Blood Work Analyzer")
-
+    
     st.markdown("""
     ### 📋 Instructions
     1. Upload a clear image of your blood work results
     2. The app will extract and analyze the values
     3. Review the analysis and visualization
-
+    
     **Important**: This tool is for educational purposes only. Always consult with your healthcare provider
     for medical advice and interpretation of your blood work results.
     """)
-
-    uploaded_file = st.file_uploader("Upload your blood work image", type=['png', 'jpg', 'jpeg'])
-
+    
+    uploaded_file = st.file_uploader("Upload your blood work results", type=['png', 'jpg', 'jpeg', 'pdf'])
+    
     if uploaded_file is not None:
-        # Display the uploaded image
-        image = Image.open(uploaded_file)
-        st.image(image, caption='Uploaded Blood Work', use_column_width=True)
-
+        file_extension = uploaded_file.name.split('.')[-1].lower()
+        
+        if file_extension == 'pdf':
+            try:
+                import PyPDF2
+                import pdf2image
+                import io
+                
+                # Convert PDF to images
+                pdf_bytes = uploaded_file.read()
+                images = pdf2image.convert_from_bytes(pdf_bytes)
+                
+                # Use the first page
+                image = images[0]
+                st.image(image, caption='Uploaded Blood Work (PDF)', use_column_width=True)
+                
+            except Exception as e:
+                st.error(f"Error processing PDF: {str(e)}")
+                st.info("Note: PDF processing requires poppler to be installed. On Mac, install with: brew install poppler")
+                return
+        else:
+            # Handle regular image uploads
+            image = Image.open(uploaded_file)
+            st.image(image, caption='Uploaded Blood Work', use_column_width=True)
+        
         # Extract text using OCR
         with st.spinner('Processing image...'):
             extracted_text = extract_text_from_image(image)
-
+        
         if extracted_text:
             # Parse blood work results
             results = parse_blood_work(extracted_text)
-
+            
             if results:
                 # Analyze results
                 analysis_df = analyze_results(results)
-
+                
                 # Display results in a table
                 st.subheader("Analysis Results")
                 st.dataframe(analysis_df)
-
+                
                 # Create and display visualization
                 fig = create_visualization(analysis_df)
                 st.plotly_chart(fig)
-
+                
                 # Provide insights
                 st.subheader("Key Insights")
                 abnormal_results = analysis_df[analysis_df['Status'] != 'NORMAL']
@@ -149,7 +170,7 @@ def main():
                         st.write(f"- {row['Marker']}: {row['Value']} {row['Unit']} ({row['Status']})")
                 else:
                     st.success("All tested markers are within normal ranges.")
-
+                
                 st.info("""
                 **Remember**: Reference ranges can vary by laboratory and individual factors such as age,
                 sex, and medical history. Always discuss your results with your healthcare provider.

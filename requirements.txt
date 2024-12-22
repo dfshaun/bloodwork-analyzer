@@ -4,3 +4,5 @@ Pillow
 pandas
 plotly
 numpy
+PyPDF2
+pdf2image
