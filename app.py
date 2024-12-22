@@ -17,6 +17,9 @@ def extract_text_from_image(image):
     """Extract text from uploaded image using OCR."""
     try:
         text = pytesseract.image_to_string(image)
+        # Add debug output
+        st.text("Raw OCR Output:")
+        st.text(text)
         return text
     except Exception as e:
         st.error(f"Error processing image: {str(e)}")
@@ -24,48 +27,136 @@ def extract_text_from_image(image):
 
 def parse_blood_work(text):
     """Parse blood work text into structured data."""
-    # Common blood work markers and their units
+    # Extended blood work markers and their patterns
     markers = {
+        # Basic Blood Count
         'WBC': r'WBC[:\s]+(\d+\.?\d*)',
         'RBC': r'RBC[:\s]+(\d+\.?\d*)',
-        'Hemoglobin': r'(?:Hemoglobin|HGB)[:\s]+(\d+\.?\d*)',
-        'Hematocrit': r'(?:Hematocrit|HCT)[:\s]+(\d+\.?\d*)',
+        'Hemoglobin': r'Hemoglobin[:\s]+(\d+\.?\d*)',
+        'Hematocrit': r'Hematocrit[:\s]+(\d+\.?\d*)',
         'Platelets': r'Platelets[:\s]+(\d+)',
-        'Glucose': r'Glucose[:\s]+(\d+)',
-        'Calcium': r'Calcium[:\s]+(\d+\.?\d*)',
-        'Sodium': r'Sodium[:\s]+(\d+)',
-        'Potassium': r'Potassium[:\s]+(\d+\.?\d*)',
-        'Chloride': r'Chloride[:\s]+(\d+)',
-        'CO2': r'CO2[:\s]+(\d+)',
-        'BUN': r'BUN[:\s]+(\d+)',
-        'Creatinine': r'Creatinine[:\s]+(\d+\.?\d*)',
+        'MCV': r'MCV[:\s]+(\d+\.?\d*)',
+        'MCH': r'MCH[:\s]+(\d+\.?\d*)',
+        'MCHC': r'MCHC[:\s]+(\d+\.?\d*)',
+        'RDW': r'RDW[:\s]+(\d+\.?\d*)',
+        
+        # Thyroid Panel
+        'TSH': r'TSH[:\s]+(\d+\.?\d*)',
+        'T4': r'Thyroxine \(T4\)[:\s]+(\d+\.?\d*)',
+        'T3': r'Triiodothyronine \(T3\)[:\s]+(\d+\.?\d*)',
+        'Free T3': r'Triiodothyronine \(T3\), Free[:\s]+(\d+\.?\d*)',
+        'Reverse T3': r'Reverse T3[:\s]+(\d+\.?\d*)',
+        
+        # Iron Studies
+        'Iron': r'Iron[:\s]+(\d+)',
+        'TIBC': r'Iron Bind\.Cap\.\(TIBC\)[:\s]+(\d+)',
+        'UIBC': r'UIBC[:\s]+(\d+)',
+        'Ferritin': r'Ferritin[:\s]+(\d+\.?\d*)',
+        'Iron Saturation': r'Iron Saturation[:\s]+(\d+)',
+        
+        # Lipid Panel
+        'Cholesterol': r'Cholesterol, Total[:\s]+(\d+)',
+        'Triglycerides': r'Triglycerides[:\s]+(\d+)',
+        'HDL': r'HDL Cholesterol[:\s]+(\d+)',
+        'LDL': r'LDL Chol Calc[:\s]+(\d+)',
+        'VLDL': r'VLDL Cholesterol[:\s]+(\d+)',
+        
+        # Hormones
+        'Testosterone': r'Testosterone[:\s]+([><]?\d+\.?\d*)',
+        'Free Testosterone': r'Free Testosterone\(Direct\)[:\s]+(\d+\.?\d*)',
+        'DHEA-Sulfate': r'DHEA-Sulfate[:\s]+(\d+\.?\d*)',
+        'Estradiol': r'Estradiol[:\s]+(\d+\.?\d*)',
+        'FSH': r'FSH[:\s]+([><]?\d+\.?\d*)',
+        'LH': r'LH[:\s]+([><]?\d+\.?\d*)',
+        
+        # Vitamins
+        'Vitamin B12': r'Vitamin B12[:\s]+([><]?\d+)',
+        'Vitamin D': r'Vitamin D, 25-Hydroxy[:\s]+(\d+\.?\d*)',
+        'Vitamin B6': r'Vitamin B6[:\s]+(\d+\.?\d*)',
+        
+        # Minerals
+        'Zinc': r'Zinc[:\s]+(\d+)',
+        'Copper': r'Copper[:\s]+(\d+)',
+        
+        # Additional Markers
+        'PSA': r'Prostate Specific Ag[:\s]+(\d+\.?\d*)',
+        'SHBG': r'Sex Horm Binding Glob[:\s]+(\d+\.?\d*)',
+        'IGF-1': r'Insulin-Like Growth Factor I[:\s]+(\d+)',
+        'Prolactin': r'Prolactin[:\s]+(\d+\.?\d*)'
     }
     
     results = {}
     for marker, pattern in markers.items():
         match = re.search(pattern, text)
         if match:
-            results[marker] = float(match.group(1))
+            value = match.group(1)
+            # Handle greater than/less than symbols
+            if value.startswith('>'):
+                value = value[1:]  # Remove '>' symbol
+            elif value.startswith('<'):
+                value = value[1:]  # Remove '<' symbol
+            results[marker] = float(value)
     
     return results
 
 def analyze_results(results):
     """Analyze blood work results and provide insights."""
-    # Reference ranges (these are approximate and should be verified with lab-specific ranges)
+    # Extended reference ranges
     reference_ranges = {
-        'WBC': (4.0, 11.0, 'K/µL'),
-        'RBC': (4.5, 5.9, 'M/µL'),
-        'Hemoglobin': (13.5, 17.5, 'g/dL'),
-        'Hematocrit': (41.0, 53.0, '%'),
-        'Platelets': (150, 450, 'K/µL'),
-        'Glucose': (70, 99, 'mg/dL'),
-        'Calcium': (8.6, 10.2, 'mg/dL'),
-        'Sodium': (135, 145, 'mEq/L'),
-        'Potassium': (3.5, 5.0, 'mEq/L'),
-        'Chloride': (98, 106, 'mEq/L'),
-        'CO2': (23, 29, 'mEq/L'),
-        'BUN': (7, 20, 'mg/dL'),
-        'Creatinine': (0.6, 1.2, 'mg/dL'),
+        # Basic Blood Count
+        'WBC': (3.4, 10.8, 'x10E3/uL'),
+        'RBC': (4.14, 5.80, 'x10E6/uL'),
+        'Hemoglobin': (13.0, 17.7, 'g/dL'),
+        'Hematocrit': (37.5, 51.0, '%'),
+        'Platelets': (150, 450, 'x10E3/uL'),
+        'MCV': (79, 97, 'fL'),
+        'MCH': (26.6, 33.0, 'pg'),
+        'MCHC': (31.5, 35.7, 'g/dL'),
+        'RDW': (11.6, 15.4, '%'),
+        
+        # Thyroid Panel
+        'TSH': (0.450, 4.500, 'uIU/mL'),
+        'T4': (4.5, 12.0, 'ug/dL'),
+        'T3': (71, 180, 'ng/dL'),
+        'Free T3': (2.0, 4.4, 'pg/mL'),
+        'Reverse T3': (9.2, 24.1, 'ng/dL'),
+        
+        # Iron Studies
+        'Iron': (38, 169, 'ug/dL'),
+        'TIBC': (250, 450, 'ug/dL'),
+        'UIBC': (111, 343, 'ug/dL'),
+        'Ferritin': (30, 400, 'ng/mL'),
+        'Iron Saturation': (15, 55, '%'),
+        
+        # Lipid Panel
+        'Cholesterol': (100, 199, 'mg/dL'),
+        'Triglycerides': (0, 149, 'mg/dL'),
+        'HDL': (39, 999, 'mg/dL'),  # >39 is normal
+        'LDL': (0, 99, 'mg/dL'),
+        'VLDL': (5, 40, 'mg/dL'),
+        
+        # Hormones
+        'Testosterone': (264, 916, 'ng/dL'),
+        'Free Testosterone': (8.7, 25.1, 'pg/mL'),
+        'DHEA-Sulfate': (138.5, 475.2, 'ug/dL'),
+        'Estradiol': (7.6, 42.6, 'pg/mL'),
+        'FSH': (1.5, 12.4, 'mIU/mL'),
+        'LH': (1.7, 8.6, 'mIU/mL'),
+        
+        # Vitamins
+        'Vitamin B12': (232, 1245, 'pg/mL'),
+        'Vitamin D': (30.0, 100.0, 'ng/mL'),
+        'Vitamin B6': (3.4, 65.2, 'ug/L'),
+        
+        # Minerals
+        'Zinc': (44, 115, 'ug/dL'),
+        'Copper': (69, 132, 'ug/dL'),
+        
+        # Additional Markers
+        'PSA': (0.0, 4.0, 'ng/mL'),
+        'SHBG': (16.5, 55.9, 'nmol/L'),
+        'IGF-1': (95, 290, 'ng/mL'),
+        'Prolactin': (3.9, 22.7, 'ng/mL')
     }
     
     analysis = []
@@ -96,8 +187,18 @@ def create_visualization(df):
         y='Value',
         color='Status',
         color_discrete_map={'NORMAL': 'green', 'LOW': 'blue', 'HIGH': 'red'},
-        title='Blood Work Results Analysis'
+        title='Blood Work Results Analysis',
+        labels={'Value': 'Value (normalized to reference range)'},
+        height=600
     )
+    
+    # Rotate x-axis labels for better readability
+    fig.update_layout(
+        xaxis_tickangle=-45,
+        showlegend=True,
+        margin=dict(b=100)  # Increase bottom margin for rotated labels
+    )
+    
     return fig
 
 def main():
@@ -105,7 +206,7 @@ def main():
     
     st.markdown("""
     ### 📋 Instructions
-    1. Upload a clear image of your blood work results
+    1. Upload your blood work results (PDF or image)
     2. The app will extract and analyze the values
     3. Review the analysis and visualization
     
