@@ -5,15 +5,20 @@ import pandas as pd
 import io
 import re
 import plotly.express as px
-import sys
-import os
 
-# Set page configuration
-st.set_page_config(
-    page_title="Blood Work Analyzer",
-    page_icon="🔬",
-    layout="wide"
-)
+st.set_page_config(page_title="Blood Work Analyzer", page_icon="🔬", layout="wide")
+
+def extract_text_from_image(image):
+    """Extract text from uploaded image using OCR."""
+    try:
+        text = pytesseract.image_to_string(image)
+        # Only show OCR output in expander
+        with st.expander("Show Raw OCR Output"):
+            st.text(text)
+        return text
+    except Exception as e:
+        st.error(f"OCR Error: {str(e)}")
+        return None
 
 def convert_pdf_to_image(pdf_bytes):
     """Convert PDF to image using pdf2image."""
@@ -22,62 +27,66 @@ def convert_pdf_to_image(pdf_bytes):
         images = pdf2image.convert_from_bytes(pdf_bytes)
         return images[0] if images else None
     except Exception as e:
-        st.error(f"PDF conversion error: {str(e)}")
-        return None
-
-def extract_text_from_image(image):
-    """Extract text from uploaded image using OCR."""
-    try:
-        text = pytesseract.image_to_string(image)
-        st.text("Raw OCR Output:")
-        st.text(text)
-        return text
-    except Exception as e:
-        st.error(f"OCR Error: {str(e)}")
+        st.error("Could not process PDF. Please ensure poppler is installed.")
         return None
 
 def parse_blood_work(text):
     """Parse blood work text into structured data."""
+    # Updated patterns for LabCorp format
     markers = {
-        'WBC': r'WBC[:\s]+(\d+\.?\d*)',
-        'RBC': r'RBC[:\s]+(\d+\.?\d*)',
-        'Hemoglobin': r'(?:Hemoglobin|HGB)[:\s]+(\d+\.?\d*)',
-        'Hematocrit': r'(?:Hematocrit|HCT)[:\s]+(\d+\.?\d*)',
-        'Platelets': r'Platelets[:\s]+(\d+)',
-        'MCV': r'MCV[:\s]+(\d+\.?\d*)',
-        'MCH': r'MCH[:\s]+(\d+\.?\d*)',
-        'MCHC': r'MCHC[:\s]+(\d+\.?\d*)',
-        'RDW': r'RDW[:\s]+(\d+\.?\d*)'
+        # CBC
+        'WBC': r'WBC[^0-9]*(\d+\.?\d*)',
+        'RBC': r'RBC[^0-9]*(\d+\.?\d*)',
+        'Hemoglobin': r'Hemoglobin[^0-9]*(\d+\.?\d*)',
+        'Hematocrit': r'Hematocrit[^0-9]*(\d+\.?\d*)',
+        'Platelets': r'Platelets[^0-9]*(\d+)',
+        
+        # Thyroid
+        'TSH': r'TSH[^0-9]*(\d+\.?\d*)',
+        'T4': r'Thyroxine \(T4\)[^0-9]*(\d+\.?\d*)',
+        'T3': r'Triiodothyronine \(T3\)[^0-9]*(\d+\.?\d*)',
+        'Free T3': r'Triiodothyronine \(T3\), Free[^0-9]*(\d+\.?\d*)',
+        
+        # Iron Studies
+        'Iron': r'Iron:\s*(\d+)',
+        'TIBC': r'Iron Bind\.Cap\.\(TIBC\)[^0-9]*(\d+)',
+        'UIBC': r'UIBC[^0-9]*(\d+)',
     }
     
     results = {}
     for marker, pattern in markers.items():
-        match = re.search(pattern, text)
+        match = re.search(pattern, text, re.IGNORECASE)
         if match:
             value = match.group(1)
-            if value.startswith('>'):
-                value = value[1:]
-            elif value.startswith('<'):
-                value = value[1:]
+            # Handle < and > symbols
+            value = value.replace('<', '').replace('>', '')
             try:
                 results[marker] = float(value)
             except ValueError:
-                st.warning(f"Could not convert {marker} value '{value}' to number")
+                continue
     
     return results
 
 def analyze_results(results):
     """Analyze blood work results and provide insights."""
     reference_ranges = {
+        # CBC
         'WBC': (3.4, 10.8, 'x10E3/uL'),
         'RBC': (4.14, 5.80, 'x10E6/uL'),
         'Hemoglobin': (13.0, 17.7, 'g/dL'),
         'Hematocrit': (37.5, 51.0, '%'),
         'Platelets': (150, 450, 'x10E3/uL'),
-        'MCV': (79, 97, 'fL'),
-        'MCH': (26.6, 33.0, 'pg'),
-        'MCHC': (31.5, 35.7, 'g/dL'),
-        'RDW': (11.6, 15.4, '%')
+        
+        # Thyroid
+        'TSH': (0.450, 4.500, 'uIU/mL'),
+        'T4': (4.5, 12.0, 'ug/dL'),
+        'T3': (71, 180, 'ng/dL'),
+        'Free T3': (2.0, 4.4, 'pg/mL'),
+        
+        # Iron Studies
+        'Iron': (38, 169, 'ug/dL'),
+        'TIBC': (250, 450, 'ug/dL'),
+        'UIBC': (111, 343, 'ug/dL'),
     }
     
     analysis = []
@@ -133,20 +142,15 @@ def main():
             file_extension = uploaded_file.name.split('.')[-1].lower()
             
             if file_extension == 'pdf':
-                # Handle PDF
                 pdf_bytes = uploaded_file.read()
                 image = convert_pdf_to_image(pdf_bytes)
                 if image is None:
-                    st.error("Could not process PDF file")
                     return
             else:
-                # Handle image
                 image = Image.open(uploaded_file)
             
-            # Display image without container width parameter
             st.image(image, caption='Uploaded Blood Work')
             
-            # Process the image
             with st.spinner('Analyzing blood work...'):
                 extracted_text = extract_text_from_image(image)
                 
@@ -159,8 +163,7 @@ def main():
                         st.subheader("Analysis Results")
                         st.dataframe(analysis_df)
                         
-                        fig = create_visualization(analysis_df)
-                        st.plotly_chart(fig)
+                        st.plotly_chart(create_visualization(analysis_df))
                         
                         st.subheader("Key Insights")
                         abnormal_results = analysis_df[analysis_df['Status'] != 'NORMAL']
@@ -171,10 +174,12 @@ def main():
                         else:
                             st.success("All tested markers are within normal ranges.")
                     else:
-                        st.error("Could not identify blood work values in the image. Please ensure the image is clear and contains standard blood work results.")
+                        st.warning("Could not identify standard blood work values. Try uploading a clearer image.")
                 
         except Exception as e:
-            st.error(f"Error processing file: {str(e)}")
+            st.error("Error processing file. Please try again with a different file.")
+            with st.expander("See detailed error"):
+                st.text(str(e))
 
 if __name__ == "__main__":
     main()
