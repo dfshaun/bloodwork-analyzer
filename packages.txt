@@ -1,0 +1,5 @@
+tesseract-ocr
+libtesseract-dev
+tesseract-ocr-eng
+poppler-utils
+python3-opencv

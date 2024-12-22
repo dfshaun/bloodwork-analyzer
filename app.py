@@ -5,6 +5,8 @@ import pandas as pd
 import io
 import re
 import plotly.express as px
+import sys
+import os
 
 # Set page configuration
 st.set_page_config(
@@ -12,6 +14,16 @@ st.set_page_config(
     page_icon="🔬",
     layout="wide"
 )
+
+def convert_pdf_to_image(pdf_bytes):
+    """Convert PDF to image using pdf2image."""
+    try:
+        import pdf2image
+        images = pdf2image.convert_from_bytes(pdf_bytes)
+        return images[0] if images else None
+    except Exception as e:
+        st.error(f"PDF conversion error: {str(e)}")
+        return None
 
 def extract_text_from_image(image):
     """Extract text from uploaded image using OCR."""
@@ -21,13 +33,11 @@ def extract_text_from_image(image):
         st.text(text)
         return text
     except Exception as e:
-        st.error(f"Error processing image: {str(e)}")
-        st.text(f"Detailed error: {str(e)}")
+        st.error(f"OCR Error: {str(e)}")
         return None
 
 def parse_blood_work(text):
     """Parse blood work text into structured data."""
-    # Common blood work markers and their patterns
     markers = {
         'WBC': r'WBC[:\s]+(\d+\.?\d*)',
         'RBC': r'RBC[:\s]+(\d+\.?\d*)',
@@ -49,7 +59,10 @@ def parse_blood_work(text):
                 value = value[1:]
             elif value.startswith('<'):
                 value = value[1:]
-            results[marker] = float(value)
+            try:
+                results[marker] = float(value)
+            except ValueError:
+                st.warning(f"Could not convert {marker} value '{value}' to number")
     
     return results
 
@@ -97,13 +110,7 @@ def create_visualization(df):
         color_discrete_map={'NORMAL': 'green', 'LOW': 'blue', 'HIGH': 'red'},
         title='Blood Work Results Analysis'
     )
-    
-    # Rotate x-axis labels for better readability
-    fig.update_layout(
-        xaxis_tickangle=-45,
-        margin=dict(b=100)  # Increase bottom margin for rotated labels
-    )
-    
+    fig.update_layout(xaxis_tickangle=-45)
     return fig
 
 def main():
@@ -126,59 +133,48 @@ def main():
             file_extension = uploaded_file.name.split('.')[-1].lower()
             
             if file_extension == 'pdf':
-                try:
-                    import pdf2image
-                    # Convert PDF to images
-                    pdf_bytes = uploaded_file.read()
-                    images = pdf2image.convert_from_bytes(pdf_bytes)
-                    
-                    # Use the first page
-                    image = images[0]
-                    st.image(image, caption='Uploaded Blood Work (PDF)', use_container_width=True)
-                    
-                except Exception as e:
-                    st.error(f"Error processing PDF: {str(e)}")
-                    st.info("Note: PDF processing requires poppler to be installed. On Mac, install with: brew install poppler")
+                # Handle PDF
+                pdf_bytes = uploaded_file.read()
+                image = convert_pdf_to_image(pdf_bytes)
+                if image is None:
+                    st.error("Could not process PDF file")
                     return
             else:
-                # Handle regular image uploads
+                # Handle image
                 image = Image.open(uploaded_file)
-                st.image(image, caption='Uploaded Blood Work', use_container_width=True)
             
-            # Extract text using OCR
-            with st.spinner('Processing image...'):
+            # Display image without container width parameter
+            st.image(image, caption='Uploaded Blood Work')
+            
+            # Process the image
+            with st.spinner('Analyzing blood work...'):
                 extracted_text = extract_text_from_image(image)
-            
-            if extracted_text:
-                # Parse blood work results
-                results = parse_blood_work(extracted_text)
                 
-                if results:
-                    # Analyze results
-                    analysis_df = analyze_results(results)
+                if extracted_text:
+                    results = parse_blood_work(extracted_text)
                     
-                    # Display results in a table
-                    st.subheader("Analysis Results")
-                    st.dataframe(analysis_df)
-                    
-                    # Create and display visualization
-                    fig = create_visualization(analysis_df)
-                    st.plotly_chart(fig, use_container_width=True)
-                    
-                    # Provide insights
-                    st.subheader("Key Insights")
-                    abnormal_results = analysis_df[analysis_df['Status'] != 'NORMAL']
-                    if len(abnormal_results) > 0:
-                        st.warning("The following markers are outside the reference range:")
-                        for _, row in abnormal_results.iterrows():
-                            st.write(f"- {row['Marker']}: {row['Value']} {row['Unit']} ({row['Status']})")
+                    if results:
+                        analysis_df = analyze_results(results)
+                        
+                        st.subheader("Analysis Results")
+                        st.dataframe(analysis_df)
+                        
+                        fig = create_visualization(analysis_df)
+                        st.plotly_chart(fig)
+                        
+                        st.subheader("Key Insights")
+                        abnormal_results = analysis_df[analysis_df['Status'] != 'NORMAL']
+                        if len(abnormal_results) > 0:
+                            st.warning("The following markers are outside the reference range:")
+                            for _, row in abnormal_results.iterrows():
+                                st.write(f"- {row['Marker']}: {row['Value']} {row['Unit']} ({row['Status']})")
+                        else:
+                            st.success("All tested markers are within normal ranges.")
                     else:
-                        st.success("All tested markers are within normal ranges.")
-                else:
-                    st.error("Could not identify blood work values in the image. Please ensure the image is clear and contains standard blood work results.")
+                        st.error("Could not identify blood work values in the image. Please ensure the image is clear and contains standard blood work results.")
+                
         except Exception as e:
             st.error(f"Error processing file: {str(e)}")
-            st.text(f"Detailed error: {str(e)}")
 
 if __name__ == "__main__":
     main()
